@@ -1,1 +1,4 @@
-.pdf
+*.pdf
+*.txt
+Rough/
+__pycache__/
