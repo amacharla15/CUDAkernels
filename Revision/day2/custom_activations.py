@@ -23,3 +23,15 @@ class CustomLeakyReLU(torch.autograd.Function):
         alpha=ctx.alpha
         relugradient=torch.where(originalinput<0,alpha,1)
         return relugradient*grad_output, None
+
+class CustomSigmoid(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        sigmoid_output=1/(1+torch.exp(-input))
+        ctx.save_for_backward(sigmoid_output)
+        return sigmoid_output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        sigmoid,=ctx.saved_tensors
+        return grad_output*sigmoid*(1-sigmoid)
