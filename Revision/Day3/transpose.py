@@ -1,0 +1,7 @@
+import torch
+
+
+# input, output are tensors on the GPU
+def solve(input: torch.Tensor, output: torch.Tensor, rows: int, cols: int):
+    output[:]=input.T
+# or   torch.transpose(x, 0, 1) - 0 , 1 are 2 dimensions
