@@ -1,6 +1,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 using namespace std;
 
 __global__ void naive_matmul(const float* A, const float* B, float* C, int M, int N, int K) { //naive matmul kernel 
@@ -75,31 +77,31 @@ __global__ void shared_matmul(const float*A, const float*B, float*C, int M, int 
 
 }
  // cpu version of matmul just to check if the kernels output matches our local matmul works for any matrix
-void reference_matmul(float A[][4], float B[][4], float C[][4], int M, int N, int K) {
+void reference_matmul(float* A, float* B, float* C, int M, int N, int K) {
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < K; j++) {
             float sum1 = 0.0f;
             for (int k = 0; k < N; k++) {
-                sum1 = sum1 + A[i][k] * B[k][j];
+                sum1 = sum1 + A[i * N + k] * B[k * K + j];
             }
-            C[i][j] = sum1;
+            C[i * K + j] = sum1;
         }
     }
 }
 // debug function used to print our matrices
-void print_matrix_4x4(float X[][4], int rows, int cols) {
+void print_matrix(float* X, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            cout << X[i][j] << " ";
+            cout << X[i * cols + j] << " ";
         }
         cout << endl;
     }
 }
 // comparison matrix for simpler way of printing if the matrices matches or not 
-bool compare_matrix_4x4(float X[][4], float Y[][4], int rows, int cols) {
+bool compare_matrix(float* X, float* Y, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            if (fabs(X[i][j] - Y[i][j]) > 1e-5) {
+            if (fabs(X[i * cols + j] - Y[i * cols + j]) > 1e-5) {
                 return false;
             }
         }
@@ -109,26 +111,33 @@ bool compare_matrix_4x4(float X[][4], float Y[][4], int rows, int cols) {
 
 int main() {
     // sizes of our matrics , can be replaced with any valid dimension numbers 
-    int M = 4;
-    int N = 4;
-    int K = 4;
+    int M, N, K;
+    cout << "Enter M N K: ";
+    cin >> M >> N >> K;
 
+    // checking if the user inputs are corret or niot 
+    if (M <= 0 || N <= 0 || K <= 0) {
+        cout << "Invalid matrix sizes" << endl;
+        return 0;
+    }
     //matrices
-    float A[4][4];
-    float B[4][4];
-    float C_ref[4][4];
-    float C_naive[4][4];
-    float C_shared[4][4];
+    float* A = new float[M * N];
+    float* B = new float[N * K];
+    float* C_ref = new float[M * K];
+    float* C_naive = new float[M * K];
+    float* C_shared = new float[M * K];
 
+    // random values initialziation 
+    srand(time(0));
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
-            A[i][j] = 1.0f;
+            A[i * N + j] = (rand() % 10) + 1;
         }
     }
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < K; j++) {
-            B[i][j] = 1.0f;
+            B[i * K + j] = (rand() % 10) + 1;
         }
     }
 
@@ -168,40 +177,40 @@ int main() {
 
     //debug statements
     cout << "Matrix A:" << endl;
-    print_matrix_4x4(A, M, N);
+    print_matrix(A, M, N);
 
     cout << endl;
     cout << "Matrix B:" << endl;
-    print_matrix_4x4(B, N, K);
+    print_matrix(B, N, K);
 
     cout << endl;
     cout << "CPU Reference C:" << endl;
-    print_matrix_4x4(C_ref, M, K);
+    print_matrix(C_ref, M, K);
 
     cout << endl;
     cout << "GPU Naive C:" << endl;
-    print_matrix_4x4(C_naive, M, K);
+    print_matrix(C_naive, M, K);
 
     cout << endl;
     cout << "GPU Shared C:" << endl;
-    print_matrix_4x4(C_shared, M, K);
+    print_matrix(C_shared, M, K);
 
     cout << endl;
-    if (compare_matrix_4x4(C_ref, C_naive, M, K)) {
+    if (compare_matrix(C_ref, C_naive, M, K)) {
         cout << "CPU and GPU Naive results match" << endl;
     } else {
         cout << "CPU and GPU Naive results do not match" << endl;
     }
 
     cout << endl;
-    if (compare_matrix_4x4(C_ref, C_shared, M, K)) {
+    if (compare_matrix(C_ref, C_shared, M, K)) {
         cout << "CPU and GPU Shared results match" << endl;
     } else {
         cout << "CPU and GPU Shared results do not match" << endl;
     }
 
     cout << endl;
-    if (compare_matrix_4x4(C_naive, C_shared, M, K)) {
+    if (compare_matrix(C_naive, C_shared, M, K)) {
         cout << "GPU Naive and GPU Shared results match" << endl;
     } else {
         cout << "GPU Naive and GPU Shared results do not match" << endl;
@@ -212,6 +221,12 @@ int main() {
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+
+    delete[] A;
+    delete[] B;
+    delete[] C_ref;
+    delete[] C_naive;
+    delete[] C_shared;
 
     return 0;
 }
