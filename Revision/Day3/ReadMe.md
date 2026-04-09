@@ -34,6 +34,7 @@ Each block loads tiles of `A` and `B` into shared memory and reuses them during 
 
 ## Build
 
+```bash
 nvcc -arch=sm_80 matmul_perf.cu -o matmul
 
 Run
