@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+
 using namespace std;
 
 __global__ void naive_matmul(const float* A, const float* B, float* C, int M, int N, int K) { //naive matmul kernel 
@@ -111,122 +112,165 @@ bool compare_matrix(float* X, float* Y, int rows, int cols) {
 
 int main() {
     // sizes of our matrics , can be replaced with any valid dimension numbers 
-    int M, N, K;
-    cout << "Enter M N K: ";
-    cin >> M >> N >> K;
-
-    // checking if the user inputs are corret or niot 
-    if (M <= 0 || N <= 0 || K <= 0) {
-        cout << "Invalid matrix sizes" << endl;
-        return 0;
-    }
-    //matrices
-    float* A = new float[M * N];
-    float* B = new float[N * K];
-    float* C_ref = new float[M * K];
-    float* C_naive = new float[M * K];
-    float* C_shared = new float[M * K];
-
-    // random values initialziation 
     srand(time(0));
-    for (int i = 0; i < M; i++) {
-        for (int j = 0; j < N; j++) {
-            A[i * N + j] = (rand() % 10) + 1;
+    int sizes[4] = {128, 256, 512, 1024};
+    int repeats = 20;
+
+    for (int s = 0; s < 4; s++) {
+        // checking if the user inputs are corret or niot 
+        int M = sizes[s];
+        int N = sizes[s];
+        int K = sizes[s];
+
+        if (M <= 0 || N <= 0 || K <= 0) {
+            cout << "Invalid matrix sizes" << endl;
+            return 0;
         }
-    }
 
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < K; j++) {
-            B[i * K + j] = (rand() % 10) + 1;
+        //matrices
+        float* A = new float[M * N];
+        float* B = new float[N * K];
+        float* C_ref = new float[M * K];
+        float* C_naive = new float[M * K];
+        float* C_shared = new float[M * K];
+
+        // random values initialziation 
+        for (int i = 0; i < M; i++) {
+            for (int j = 0; j < N; j++) {
+                A[i * N + j] = (rand() % 10) + 1;
+            }
         }
+
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < K; j++) {
+                B[i * K + j] = (rand() % 10) + 1;
+            }
+        }
+
+        reference_matmul(A, B, C_ref, M, N, K);
+
+        //pointers to our gpu memory 
+        float* d_A;
+        float* d_B;
+        float* d_C; 
+
+        //memory allocation
+        cudaMalloc((void**)&d_A, M * N * sizeof(float));
+        cudaMalloc((void**)&d_B, N * K * sizeof(float));
+        cudaMalloc((void**)&d_C, M * K * sizeof(float));
+
+        //copying the memory to gpu
+        cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_B, B, N * K * sizeof(float), cudaMemcpyHostToDevice);
+
+        //cuda timers for kernels
+        cudaEvent_t start_naive, stop_naive, start_shared, stop_shared;
+        cudaEventCreate(&start_naive);
+        cudaEventCreate(&stop_naive);
+        cudaEventCreate(&start_shared);
+        cudaEventCreate(&stop_shared);
+
+        float naive_time_ms = 0.0f;
+        float shared_time_ms = 0.0f;
+        double naive_total_ms = 0.0;
+        double shared_total_ms = 0.0;
+
+        //block dimensions and threads per block 
+        dim3 threadsPerBlock(16, 16);
+        dim3 blocksPerGrid((K + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                           (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+        // kernel launch 
+
+        // timers and Flops check with both CPU and CUDA timers
+
+        //warmup
+        naive_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+        cudaDeviceSynchronize();
+
+        shared_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+        cudaDeviceSynchronize();
+
+        for (int r = 0; r < repeats; r++) {
+            cudaEventRecord(start_naive);
+            naive_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+            cudaEventRecord(stop_naive);
+            cudaEventSynchronize(stop_naive);
+            cudaEventElapsedTime(&naive_time_ms, start_naive, stop_naive);
+            naive_total_ms += naive_time_ms;
+        }
+
+        cudaMemcpy(C_naive, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost); // copy back our results
+
+        // shared_timer
+        for (int r = 0; r < repeats; r++) {
+            cudaEventRecord(start_shared);
+            shared_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+            cudaEventRecord(stop_shared);
+            cudaEventSynchronize(stop_shared);
+            cudaEventElapsedTime(&shared_time_ms, start_shared, stop_shared);
+            shared_total_ms += shared_time_ms;
+        }
+
+        cudaMemcpy(C_shared, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost); // copy back our results
+
+        double naive_avg_ms = naive_total_ms / repeats;
+        double shared_avg_ms = shared_total_ms / repeats;
+
+        double flops = 2.0 * M * N * K;
+        double naive_gflops = flops / (naive_avg_ms / 1000.0) / 1e9;
+        double shared_gflops = flops / (shared_avg_ms / 1000.0) / 1e9;
+        double speedup = naive_avg_ms / shared_avg_ms;
+
+        bool naive_ok = compare_matrix(C_ref, C_naive, M, K);
+        bool shared_ok = compare_matrix(C_ref, C_shared, M, K);
+
+        cout << "Size: " << M << "x" << N << "x" << K << endl;
+        cout << "Naive avg time: " << naive_avg_ms << " ms" << endl;
+        cout << "Shared avg time: " << shared_avg_ms << " ms" << endl;
+        cout << "Naive GFLOPS: " << naive_gflops << endl;
+        cout << "Shared GFLOPS: " << shared_gflops << endl;
+        cout << "Speedup (naive/shared): " << speedup << "x" << endl;
+
+        cout << endl;
+        if (naive_ok) {
+            cout << "CPU and GPU Naive results match" << endl;
+        } else {
+            cout << "CPU and GPU Naive results do not match" << endl;
+        }
+
+        cout << endl;
+        if (shared_ok) {
+            cout << "CPU and GPU Shared results match" << endl;
+        } else {
+            cout << "CPU and GPU Shared results do not match" << endl;
+        }
+
+        cout << endl;
+        if (compare_matrix(C_naive, C_shared, M, K)) {
+            cout << "GPU Naive and GPU Shared results match" << endl;
+        } else {
+            cout << "GPU Naive and GPU Shared results do not match" << endl;
+        }
+
+        cout << "-----------------------------" << endl;
+
+        //freeing the memory
+        cudaFree(d_A);
+        cudaFree(d_B);
+        cudaFree(d_C);
+
+        delete[] A;
+        delete[] B;
+        delete[] C_ref;
+        delete[] C_naive;
+        delete[] C_shared;
+
+        cudaEventDestroy(start_naive);
+        cudaEventDestroy(stop_naive);
+        cudaEventDestroy(start_shared);
+        cudaEventDestroy(stop_shared);
     }
-
-    reference_matmul(A, B, C_ref, M, N, K);
-
-    //pointers to our gpu memory 
-    float* d_A;
-    float* d_B;
-    float* d_C; 
-
-
-    //memory allocation
-    cudaMalloc((void**)&d_A, M * N * sizeof(float));
-    cudaMalloc((void**)&d_B, N * K * sizeof(float));
-    cudaMalloc((void**)&d_C, M * K * sizeof(float));
-
-    //copying the memory to gpu
-
-    cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, B, N * K * sizeof(float), cudaMemcpyHostToDevice);
-
-    //block dimensions and threads per block 
-    dim3 threadsPerBlock(16, 16);
-    dim3 blocksPerGrid((K + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                       (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
-// kernel launch 
-    naive_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
-    cudaDeviceSynchronize(); // wait until kernels finish
-
-    cudaMemcpy(C_naive, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost); // copy back our results
-
-    shared_matmul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
-    cudaDeviceSynchronize(); // wait until kernels finish
-
-    cudaMemcpy(C_shared, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost); // copy back our results
-
-
-    //debug statements
-    cout << "Matrix A:" << endl;
-    print_matrix(A, M, N);
-
-    cout << endl;
-    cout << "Matrix B:" << endl;
-    print_matrix(B, N, K);
-
-    cout << endl;
-    cout << "CPU Reference C:" << endl;
-    print_matrix(C_ref, M, K);
-
-    cout << endl;
-    cout << "GPU Naive C:" << endl;
-    print_matrix(C_naive, M, K);
-
-    cout << endl;
-    cout << "GPU Shared C:" << endl;
-    print_matrix(C_shared, M, K);
-
-    cout << endl;
-    if (compare_matrix(C_ref, C_naive, M, K)) {
-        cout << "CPU and GPU Naive results match" << endl;
-    } else {
-        cout << "CPU and GPU Naive results do not match" << endl;
-    }
-
-    cout << endl;
-    if (compare_matrix(C_ref, C_shared, M, K)) {
-        cout << "CPU and GPU Shared results match" << endl;
-    } else {
-        cout << "CPU and GPU Shared results do not match" << endl;
-    }
-
-    cout << endl;
-    if (compare_matrix(C_naive, C_shared, M, K)) {
-        cout << "GPU Naive and GPU Shared results match" << endl;
-    } else {
-        cout << "GPU Naive and GPU Shared results do not match" << endl;
-    }
-
-    //freeing the memory
-
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
-
-    delete[] A;
-    delete[] B;
-    delete[] C_ref;
-    delete[] C_naive;
-    delete[] C_shared;
 
     return 0;
 }
