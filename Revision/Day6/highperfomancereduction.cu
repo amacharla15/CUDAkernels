@@ -1,6 +1,6 @@
 #include <cuda_runtime.h>
 
-__global__ void highperformancereduction(const float*input, float *output, int N){
+__global__ void highperformancereduction(const float*input, float *partial_sums, int N){
     int gid=blockIdx.x*blockDim.x+threadIdx.x;
     int lid=threadIdx.x; 
     __shared__ float arr[256];
@@ -19,7 +19,7 @@ __global__ void highperformancereduction(const float*input, float *output, int N
         __syncthreads();
     }
     if(lid==0){
-        atomicAdd(output,arr[0]);
+        partial_sums[blockIdx.x]=arr[0];
     }
 }
 
@@ -27,7 +27,14 @@ __global__ void highperformancereduction(const float*input, float *output, int N
 extern "C" void solve(const float* input, float* output, int N) {
     int threadsperblock=256;
     int blockspergrid=(N+threadsperblock-1)/threadsperblock;
+    float* partial_sums;
+    cudaMalloc(&partial_sums, blockspergrid * sizeof(float));
     cudaMemset(output, 0, sizeof(float));
-    highperformancereduction<<<blockspergrid,threadsperblock>>>(input,output,N);
+    highperformancereduction<<<blockspergrid,threadsperblock>>>(input,partial_sums,N);
+    int secondN = blockspergrid;
+    int secondBlocks = (secondN + threadsperblock - 1) / threadsperblock;
+
+    highperformancereduction<<<secondBlocks, threadsperblock>>>(partial_sums, output, secondN);
     cudaDeviceSynchronize();
+    cudaFree(partial_sums);
 }
