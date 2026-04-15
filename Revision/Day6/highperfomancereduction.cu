@@ -1,6 +1,6 @@
 #include <cuda_runtime.h>
 
-__global__ void highperformancereduction(const float*input, float *partial_sums, int N){
+__global__ void highperformancereduction(const float*input, float *output, int N){
     int gid=blockIdx.x*blockDim.x+threadIdx.x;
     int lid=threadIdx.x; 
     __shared__ float arr[256];
@@ -19,7 +19,7 @@ __global__ void highperformancereduction(const float*input, float *partial_sums,
         __syncthreads();
     }
     if(lid==0){
-        partial_sums[blockIdx.x]=arr[0];
+        output[blockIdx.x]=arr[0];
     }
 }
 
