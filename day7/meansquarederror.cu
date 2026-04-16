@@ -16,17 +16,24 @@ __global__ void meansquarederror(const float* predictions, const float* targets,
     }
     __syncthreads();
     int temp=128;
-    while(temp>0){
+    while(temp>=32){
         if(lid<temp){
             arr[lid]=arr[lid]+arr[lid+temp];
         }
         temp=temp/2;
         __syncthreads();
     }
-    if(lid==0){
-        atomicAdd(mse,arr[lid]/(float)N);
+    if(lid<32){
+        float val = arr[lid];
+        val += __shfl_down_sync(0xffffffff, val, 16);
+        val += __shfl_down_sync(0xffffffff, val, 8);
+        val += __shfl_down_sync(0xffffffff, val, 4);
+        val += __shfl_down_sync(0xffffffff, val, 2);
+        val += __shfl_down_sync(0xffffffff, val, 1);
+        if (lid == 0) {
+            atomicAdd(mse, val / (float)N);
+        }
     }
-}
 // predictions, targets, mse are device pointers
 extern "C" void solve(const float* predictions, const float* targets, float* mse, int N) {
     int threadsperblock=256;
