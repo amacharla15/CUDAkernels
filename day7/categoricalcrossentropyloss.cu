@@ -65,3 +65,4 @@ extern "C" void solve(const float* logits, const int* true_labels, float* loss, 
     cudaDeviceSynchronize();
     cudaFree(arr);
 }
+s
