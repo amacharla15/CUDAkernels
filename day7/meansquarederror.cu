@@ -6,10 +6,11 @@ __global__ void meansquarederror(const float* predictions, const float* targets,
     int stride= blockDim.x * gridDim.x;
     int lid=threadIdx.x;
     if(gid<N){
-        arr[lid]=0.0f;
+        float local_sum=0.0f;
         for (int idx = gid; idx < N; idx += stride){
-            arr[lid]=arr[lid]+(predictions[idx]-targets[idx])*(predictions[idx]-targets[idx]);
+            local_sum= local_sum+(predictions[idx]-targets[idx])*(predictions[idx]-targets[idx]);
         }
+        arr[lid]=local_sum;
     }else{
         arr[lid]=0;
     }
