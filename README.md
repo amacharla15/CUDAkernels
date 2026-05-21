@@ -1,3 +1,19 @@
+For every important kernel, the required flow is:
+
+PyTorch reference -> CUDA implementation -> Triton implementation -> correctness test -> benchmark -> profiling note
+
+### Standard repo layout
+
+```text
+pytorch_refs/       PyTorch reference implementations
+cuda/               Clean CUDA kernel implementations
+triton/             Triton implementations
+benchmarks/         Benchmark scripts and CSV results
+benchmarks/results/ Saved benchmark outputs
+reports/            Written kernel analysis reports
+profiling/          Nsight / PyTorch profiler notes
+legacy/             Older practice code kept for reference
+scripts/            Build/run helper scripts
 # CUDA Kernels
 
 CUDA kernels implemented from scratch while practicing GPU programming, parallel reductions, shared memory, warp-level primitives, and ML kernel patterns.
