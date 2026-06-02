@@ -1,7 +1,7 @@
 *.pdf
 *.txt
 Rough/
-data/
+
 .env/
 __pycache__/
 wandb/
