@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-vllm-server
+  namespace: lambda-llm-serving
+  labels:
+    app: qwen-vllm-server
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: qwen-vllm-server
+
+  template:
+    metadata:
+      labels:
+        app: qwen-vllm-server
+
+    spec:
+      containers:
+        - name: vllm
+          image: qwen-vllm:phase3
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8000
+
+          env:
+            - name: MODEL_DIR
+              value: /models/qwen_lora_merged_v1
+            - name: SERVED_MODEL_NAME
+              value: qwen_lora_merged_v1
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "8000"
+            - name: DTYPE
+              value: float16
+            - name: MAX_MODEL_LEN
+              value: "1024"
+            - name: GPU_MEMORY_UTILIZATION
+              value: "0.85"
+            - name: VLLM_USE_V1
+              value: "0"
+
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+            requests:
+              memory: "8Gi"
+
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+              readOnly: true
+
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: qwen-model-pvc
