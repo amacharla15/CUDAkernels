@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-vllm-service
+  namespace: lambda-llm-serving
+
+spec:
+  type: LoadBalancer
+
+  selector:
+    app: qwen-vllm-server
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
