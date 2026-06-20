@@ -1,0 +1,7 @@
+{
+  "model_name": "qwen_lora_merged",
+  "model_version": "1",
+  "mlflow_source": "file:///mnt/c/Users/akshi/Downloads/ML%20Plan/lambda-ml-infra-prep/mlflow_artifacts/a9a4ca9a272c4138bce9bed5d4df6bcd/artifacts/model_artifact",
+  "serving_model_dir": "/mnt/c/Users/akshi/Downloads/ML Plan/lambda-ml-infra-prep/toy-llm-prod-flow/02_vllm_serving/models/qwen_lora_merged_v1",
+  "vllm_ready": true
+}
